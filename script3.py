@@ -67,6 +67,9 @@ train_data["date_diff"] = train_data["date declar annee"] - train_data["date amm
 train_data["nb_years_declar"] = train_data["date declar annee"].apply(lambda x: 2016 - x)
 train_data["nb_years_amm"] = train_data["date amm annee"].apply(lambda x: 2016 - x)
 
+train_data = remove_outliers(train_data, "prix", 10)
+train_data = train_data.reset_index(drop=True)
+
 y = train_data["prix"]
 to_drop = ["prix"]
 train_data = train_data.drop(to_drop, axis=1)
@@ -90,6 +93,7 @@ def vectorize_in_test(col_name):
 
 stop_words_ti = vectorize_in_test("titulaires")
 stop_words_va = vectorize_in_test("voies admin")
+stop_words_su = vectorize_in_test("substances")
 
 def vectorize_substances(training, testing):
     substances = training.substances.apply(lambda x: re.sub(r'\(|\)|,','',x))
@@ -103,7 +107,8 @@ def vectorize_substances(training, testing):
 def preprocessing(training, testing):
     x_train_ti , x_test_ti = vectorize(training, testing, "titulaires", stop_words_ti)
     x_train_va , x_test_va = vectorize(training, testing, "voies admin", stop_words_va)
-    x_train_su , x_test_su = vectorize_substances(training, testing)
+    # x_train_su , x_test_su = vectorize_substances(training, testing)
+    x_train_su , x_test_su = vectorize(training, testing, "substances", stop_words_su)
 
     x_train_num = training[num_cols].as_matrix()
     x_test_num = testing[num_cols].as_matrix()
@@ -147,8 +152,9 @@ for train_idx, test_idx in kfold:
     model.fit(x_train, y_train)
     # model.fit(x_train, y_train, sample_weight=w)
     y_pred = model.predict(x_test)
-
-    scores.append(mape(y_test, y_pred))
+    score = mape(y_test, y_pred)
+    print score
+    scores.append(score)
     # y_pred_list.append(y_pred)
     # y_test_list.append(y_test)
 
