@@ -6,6 +6,7 @@ from pandas import read_csv, Series, DataFrame, concat, value_counts
 from sklearn.feature_extraction.text import CountVectorizer, TfidfVectorizer
 from sklearn.feature_extraction import DictVectorizer
 from sklearn.metrics import make_scorer
+from sklearn.metrics.pairwise import cosine_similarity
 from sklearn.grid_search import GridSearchCV
 from sklearn.ensemble import GradientBoostingRegressor, AdaBoostRegressor, RandomForestRegressor
 from sklearn.feature_selection import f_regression, SelectKBest
@@ -319,6 +320,40 @@ res.to_csv("./data/res.csv", sep=";", index=False)
 
 train_data = read_csv('./boites_medicaments_train.csv', encoding='utf-8', sep=";")
 test_data = read_csv('./boites_medicaments_test.csv', encoding='utf-8', sep=";")
+
+
+substances = train_data.substances.apply(lambda x: re.sub(r'\(|\)|,','',x))
+substances_test = test_data.substances.apply(lambda x: re.sub(r'\(|\)|,','',x))
+vec = CountVectorizer(strip_accents="unicode", analyzer="char_wb", ngram_range=(3,3), binary=True)
+x = vec.fit_transform(substances)
+xtest = vec.transform(substances_test)
+cos = cosine_similarity(x)
+cos2 = cosine_similarity(x,xtest)
+mask = cos > 0.7
+
+for i in range(0,cos2.shape[1]):
+    m = max(cos2[:,i])
+    if m < 0.8 and m>0.7:
+        print i, test_data.substances.loc[i], max(cos2[:,i]), min(cos2[:,i])
+        j = np.argmax(cos2[:,i])
+        print train_data.loc[j,"substances"]
+        print "----------------------------"
+
+def make_clusters(train):
+    clusters = []
+    done = []
+    cluster_index = 0
+    for i in range(0, train.shape[0]):
+        if i in done:
+            continue
+        else:
+            index = train.index[mask[i]]
+            clusters.append({cluster_index: index })
+            done.extend(list(index))
+            cluster_index += 1
+    return clusters
+
+
 
 def substances_processing(x):
     s_lower = unicode2ascii(x).lower().replace("(","").replace(")","")
