@@ -14,7 +14,7 @@ from sklearn.feature_selection import f_regression, SelectKBest
 from sklearn.cross_validation import train_test_split, KFold, cross_val_score
 from sklearn.preprocessing import StandardScaler
 from sklearn.svm import LinearSVR, SVR
-from sklearn.linear_model import Ridge, RidgeCV, SGDRegressor
+from sklearn.linear_model import Ridge, RidgeCV, SGDRegressor, PassiveAggressiveRegressor
 from sklearn.neighbors import KNeighborsRegressor, KernelDensity
 
 train_data = read_csv('./boites_medicaments_train.csv', encoding='utf-8', sep=";")
@@ -33,7 +33,12 @@ num_cols = [   "libelle_plaquette",
                 "libelle_film",
                 "libelle_poche",
                 "libelle_capsule",
-                "nb_plaquette",
+                "date_diff",
+                "nb_years_amm",
+                "nb_years_declar"]
+
+
+nb_cols = [     "nb_plaquette",
                 "nb_ampoule",
                 "nb_flacon",
                 "nb_tube",
@@ -46,10 +51,9 @@ num_cols = [   "libelle_plaquette",
                 "nb_film",
                 "nb_poche",
                 "nb_capsule",
-                "nb_ml",
-                "date_diff",
-                "nb_years_amm",
-                "nb_years_declar"]
+                "nb_ml"]
+
+num_cols.extend(nb_cols)
 
 to_vectorize = ["statut",
                 "etat commerc",
@@ -81,7 +85,7 @@ def vectorize(training, testing, col_name, stop_words):
     vec = CountVectorizer(tokenizer=my_tokenizer, stop_words=stop_words, strip_accents="unicode")
     x_train = vec.fit_transform(training[col_name])
     x_test = vec.transform(testing[col_name])
-    return x_train, x_test
+    return x_train, x_test, vec.get_feature_names()
 
 def vectorize_in_test(col_name):
     v = CountVectorizer(tokenizer=my_tokenizer, stop_words=None, strip_accents="unicode")
@@ -101,14 +105,14 @@ def vectorize_substances(training, testing):
     vec = CountVectorizer(strip_accents="unicode", analyzer="char_wb", ngram_range=(3,3), binary=True)
     x = vec.fit_transform(substances)
     xtest = vec.transform(substances_test)
-    return x, xtest
+    return x, xtest, vec.get_feature_names()
 
 
 def preprocessing(training, testing):
-    x_train_ti , x_test_ti = vectorize(training, testing, "titulaires", stop_words_ti)
-    x_train_va , x_test_va = vectorize(training, testing, "voies admin", stop_words_va)
-    # x_train_su , x_test_su = vectorize_substances(training, testing)
-    x_train_su , x_test_su = vectorize(training, testing, "substances", stop_words_su)
+    x_train_ti , x_test_ti, _ = vectorize(training, testing, "titulaires", stop_words_ti)
+    x_train_va , x_test_va, _ = vectorize(training, testing, "voies admin", stop_words_va)
+    # x_train_su , x_test_su, _ = vectorize_substances(training, testing)
+    x_train_su , x_test_su, _ = vectorize(training, testing, "substances", stop_words_su)
 
     x_train_num = training[num_cols].as_matrix()
     x_test_num = testing[num_cols].as_matrix()
@@ -160,3 +164,41 @@ for train_idx, test_idx in kfold:
 
     print time.time() - t0
     it += 1
+
+
+
+training, testing, y_train, y_test = train_test_split(train_data, y, train_size=0.7)
+feature_names = []
+x_train_cat = training[to_vectorize].T.to_dict().values()
+x_test_cat = testing[to_vectorize].T.to_dict().values()
+vec_dict = DictVectorizer(sparse=False)
+x_train_cat = vec_dict.fit_transform(x_train_cat)
+x_test_cat = vec_dict.transform(x_test_cat)
+feature_names.extend(vec_dict.feature_names_)
+
+x_train_num = training[num_cols].as_matrix()
+x_test_num = testing[num_cols].as_matrix()
+feature_names.extend(num_cols)
+
+x_train_va , x_test_va, fnames = vectorize(training, testing, "voies admin", stop_words_va)
+feature_names.extend(fnames)
+x_train_ti , x_test_ti, fnames = vectorize(training, testing, "titulaires", stop_words_ti)
+feature_names.extend(fnames)
+x_train_su , x_test_su, fnames = vectorize_substances(training, testing)
+# x_train_su , x_test_su, fnames = vectorize(training, testing, "substances", stop_words_su)
+feature_names.extend(fnames)
+
+x_train_num = np.hstack((x_train_num, x_train_va.toarray(), x_train_ti.toarray(), x_train_su.toarray()))
+x_test_num = np.hstack((x_test_num, x_test_va.toarray(), x_test_ti.toarray(), x_test_su.toarray()))
+
+x_train = np.hstack((x_train_cat, x_train_num))
+x_test = np.hstack((x_test_cat, x_test_num))
+model = RandomForestRegressor(n_estimators=500, max_depth=None, min_samples_split=1, random_state=0, n_jobs=10)
+# model = PassiveAggressiveRegressor(verbose=1, n_iter=50)
+model.fit(x_train, y_train)
+y_pred = model.predict(x_test)
+score = mape(y_test, y_pred)
+print "score", score
+
+importance = DataFrame({"fname": feature_names, "importance":model.feature_importances_})
+importance = importance.sort_values('importance',ascending=False)
