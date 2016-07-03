@@ -184,8 +184,8 @@ x_train_va , x_test_va, fnames = vectorize(training, testing, "voies admin", sto
 feature_names.extend(fnames)
 x_train_ti , x_test_ti, fnames = vectorize(training, testing, "titulaires", stop_words_ti)
 feature_names.extend(fnames)
-x_train_su , x_test_su, fnames = vectorize_substances(training, testing)
-# x_train_su , x_test_su, fnames = vectorize(training, testing, "substances", stop_words_su)
+# x_train_su , x_test_su, fnames = vectorize_substances(training, testing)
+x_train_su , x_test_su, fnames = vectorize(training, testing, "substances", stop_words_su)
 feature_names.extend(fnames)
 
 x_train_num = np.hstack((x_train_num, x_train_va.toarray(), x_train_ti.toarray(), x_train_su.toarray()))
