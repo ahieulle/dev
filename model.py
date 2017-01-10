@@ -9,11 +9,14 @@ def mape(y_true, y_pred):
     errors = np.abs((y_true - y_pred) / y_true)
     return np.mean(errors)
 
-train_data["logprix"] = train_data["prix"].apply(np.log)
-# train_data["logprix"] = ((train_data["prix"].apply(np.log)+1).apply(np.log)+1).apply(np.log)
+data = train_data
+
+data["logprix"] = data["prix"].apply(np.log)
+data.reset_index(inplace=True)
+# data["logprix"] = ((data["prix"].apply(np.log)+1).apply(np.log)+1).apply(np.log)
 
 n_folds = 5
-kfold = KFold(train_data.shape[0], n_folds, shuffle=True, random_state=12345)
+kfold = KFold(data.shape[0], n_folds, shuffle=True, random_state=12345)
 scores = []
 
 params = {"n_estimators":200,
@@ -27,11 +30,11 @@ for train_idx, test_idx in kfold:
     print ("fold " + str(it +1))
     t0 = time.time()
     ## compute KF train and test sets:
-    x_train = train_data.loc[train_idx, variables]
-    x_test = train_data.loc[test_idx, variables]
+    x_train = data.loc[train_idx, variables]
+    x_test = data.loc[test_idx, variables]
 
-    y_train = train_data.loc[train_idx, "logprix"]
-    y_test = train_data.loc[test_idx, "logprix"]
+    y_train = data.loc[train_idx, "logprix"]
+    y_test = data.loc[test_idx, "logprix"]
 
     model = RandomForestRegressor(**params)
     # model = RANSACRegressor(base_model, min_samples=1000, max_trials=1000)

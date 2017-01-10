@@ -2,6 +2,15 @@ from __future__ import print_function
 
 from pandas import read_csv, notnull
 from sklearn.preprocessing import LabelEncoder
+from sklearn.neighbors import NearestNeighbors
+
+
+def remove_accents(text):
+    return text.str.normalize('NFKD').str.encode('ascii', errors='ignore').str.decode('utf-8')
+
+def lower(text):
+    return text.str.lower()
+
 
 train_data = read_csv('./boites_medicaments_train.csv', encoding='utf-8', sep=";")
 test_data = read_csv('./boites_medicaments_test.csv', encoding='utf-8', sep=";")
@@ -42,15 +51,21 @@ cis_compo_cols = ["CIS", "element_pharma", "code_susbtance", "substances", "dosa
                     "ref_dosage", "nature_composant", "numero_lien_substances", "unknown"]
 cis_compo.columns = cis_compo_cols
 
-final = cis.set_index("CIS").join(cis_cip.set_index("CIS")).join(cis_compo.set_index("CIS"))
+compo_txt_cols = ["element_pharma", "substances", "dosage_substance", "ref_dosage"]
+cis_compo[compo_txt_cols] = cis_compo[compo_txt_cols].apply(remove_accents)
+cis_compo[compo_txt_cols] = cis_compo[compo_txt_cols].apply(lower)
+
+agg_subs = cis_compo.groupby("CIS").agg({"substances": lambda x: ", ".join(list(x))})
+
+# final = cis.set_index("CIS").join(cis_cip.set_index("CIS")).join(cis_compo.set_index("CIS"))
+final = cis.set_index("CIS").join(cis_cip.set_index("CIS")).join(agg_subs)
 final = final[notnull(final["prix"])]
 
+mask = final["prix"].apply(lambda x: len(x.split(","))) > 2
+final = final[~mask]
 
-def remove_accents(text):
-    return text.str.normalize('NFKD').str.encode('ascii', errors='ignore').str.decode('utf-8')
-
-def lower(text):
-    return text.str.lower()
+final["prix"] = final["prix"].str.replace(",",".")
+final["prix"] = final["prix"].apply(float)
 
 txt_cols = [   "statut",
                 "etat commerc",
@@ -158,3 +173,46 @@ for row in test_data.itertuples():
     value_generique = 1 if ('generiques' in labs or 'generics' in labs or 'eurogenerics' in labs) else 0
     test_data.set_value(idx, 'generique', int(value_generique))
     idx += 1
+
+titulaires_idx = list(final.columns).index("titulaires")
+idx = 0
+gen = []
+for row in final.itertuples():
+    labs = str(row[titulaires_idx + 1])
+    value_generique = 1 if ('generiques' in labs or 'generics' in labs or 'eurogenerics' in labs) else 0
+    gen.append(value_generique)
+    idx += 1
+final["generique"] = gen
+
+
+##########
+# try to find original dataset in final dataset
+var2 = var_cat + var_substances + var_dates + var_titulaires + var_voies_admin \
+       + ["tx rembours"]
+knn = NearestNeighbors()
+knn.fit(final.loc[:,var2])
+
+t0 = time.time()
+neighbors_train = {}
+neighbors_test = {}
+missing_train = list()
+missing_test = list()
+for k in range(0,train_data.shape[0]):
+    if k % 1000 == 0:
+        print(k)
+    dist, ind = knn.kneighbors(train_data.loc[k,var2].values.reshape(1,-1))
+    if dist[0][0] == 0:
+        mask = dist[0] == 0
+        neighbors_train[k] = ind[0][mask]
+    else:
+        missing_train.append(k)
+for k in range(0,test_data.shape[0]):
+    if k % 1000 == 0:
+        print(k)
+    dist, ind = knn.kneighbors(test_data.loc[k,var2].values.reshape(1,-1))
+    if dist[0][0] == 0:
+        mask = dist[0] == 0
+        neighbors_test[k] = ind[0][mask]
+    else:
+        missing_test.append(k)
+print(time.time() - t0)
